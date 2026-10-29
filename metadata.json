@@ -1,0 +1,6 @@
+{
+  "name": "StudyNest 12",
+  "description": "Comprehensive Class 12 board exam preparation platform covering Physics, Chemistry, Biology, Mathematics, and Computer Science with model answers, audio overviews, video lessons, and content management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
