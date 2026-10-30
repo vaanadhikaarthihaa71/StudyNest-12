@@ -10,6 +10,8 @@ import {
   BookOpen,
   Home,
   CheckCircle,
+  User,
+  LogOut,
 } from 'lucide-react';
 import { useStudy } from '../../context/StudyContext';
 
@@ -17,10 +19,19 @@ interface HeaderProps {
   currentView: string;
   onNavigate: (view: string, params?: Record<string, string>) => void;
   onOpenSearch: () => void;
+  onReturnToLogin?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenSearch }) => {
-  const { bookmarks, getTotalCompletedCount, isAdmin } = useStudy();
+export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenSearch, onReturnToLogin }) => {
+  const {
+    bookmarks,
+    getTotalCompletedCount,
+    isAdmin,
+    currentStudent,
+    isStudentAuthenticated,
+    openAuthModal,
+    openProfileModal,
+  } = useStudy();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const completedCount = getTotalCompletedCount();
@@ -104,6 +115,28 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
 
             <div className="h-5 w-px bg-slate-200 mx-2" />
 
+            {/* Student Account / Sign In Button */}
+            {isStudentAuthenticated && currentStudent ? (
+              <button
+                onClick={openProfileModal}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                title="View student profile and learning records"
+              >
+                <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">
+                  {currentStudent.full_name.charAt(0).toUpperCase()}
+                </div>
+                <span className="max-w-[100px] truncate">{currentStudent.full_name.split(' ')[0]}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => openAuthModal('login')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-200/80 transition-all cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Student Login</span>
+              </button>
+            )}
+
             {/* Admin Portal Button */}
             <button
               onClick={() => onNavigate(isAdmin ? 'admin-dashboard' : 'admin-login')}
@@ -116,10 +149,40 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
               <Shield className="w-3.5 h-3.5 text-violet-600" />
               <span>{isAdmin ? 'Admin Console' : 'Admin Login'}</span>
             </button>
+
+            {/* Exit / Return to Login Screen */}
+            {onReturnToLogin && (
+              <button
+                onClick={onReturnToLogin}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer"
+                title="Switch role or return to Login Screen"
+              >
+                <LogOut className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden xl:inline">Switch / Exit</span>
+              </button>
+            )}
           </nav>
 
           {/* Mobile Right Action Icons */}
           <div className="flex items-center gap-2 lg:hidden">
+            {isStudentAuthenticated && currentStudent ? (
+              <button
+                onClick={openProfileModal}
+                className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow-xs"
+                title="Student Profile"
+              >
+                {currentStudent.full_name.charAt(0).toUpperCase()}
+              </button>
+            ) : (
+              <button
+                onClick={() => openAuthModal('login')}
+                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                title="Student Sign In"
+              >
+                <User className="w-5 h-5" />
+              </button>
+            )}
+
             <button
               onClick={onOpenSearch}
               className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
@@ -142,6 +205,35 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-1 shadow-lg animate-in slide-in-from-top duration-200">
+          {isStudentAuthenticated && currentStudent ? (
+            <div
+              onClick={() => {
+                openProfileModal();
+                setMobileMenuOpen(false);
+              }}
+              className="p-3 mb-2 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center gap-3 cursor-pointer"
+            >
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
+                {currentStudent.full_name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-slate-900 truncate">{currentStudent.full_name}</div>
+                <div className="text-[11px] text-indigo-700 font-semibold">{currentStudent.email}</div>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                openAuthModal('login');
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl text-sm font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 cursor-pointer"
+            >
+              <User className="w-5 h-5 text-indigo-600" />
+              <span>Student Sign In / Register</span>
+            </button>
+          )}
+
           {navLinks.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
@@ -180,8 +272,21 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate, onOpenS
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-violet-800 bg-violet-50 hover:bg-violet-100 transition-colors"
             >
               <Shield className="w-5 h-5 text-violet-600" />
-              <span>{isAdmin ? 'Admin Dashboard (Active)' : 'Admin Content Manager'}</span>
+              <span>{isAdmin ? 'Admin Console' : 'Admin Login'}</span>
             </button>
+
+            {onReturnToLogin && (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onReturnToLogin();
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors mt-2"
+              >
+                <LogOut className="w-5 h-5 text-rose-600" />
+                <span>Return to Login Screen</span>
+              </button>
+            )}
           </div>
         </div>
       )}

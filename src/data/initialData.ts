@@ -201,12 +201,6 @@ $$\\vec{E} = \\frac{\\lambda}{2\\pi \\varepsilon_0 r} \\hat{n}$$
 **Key Takeaways for Board Exam:**
 * The field varies inversely with distance: $E \\propto \\frac{1}{r}$.
 * Mention the direction: radially outward for $\\lambda > 0$ and radially inward for $\\lambda < 0$.`,
-    audio_url: 'https://actions.google.com/sounds/v1/ambiences/humming_room_tone.ogg',
-    audio_title: "Audio Concept Walkthrough: Gauss's Law Application",
-    audio_description: 'A 3-minute concept breakdown explaining how to draw the cylindrical Gaussian surface and avoid losing marks on surface end caps.',
-    video_url: 'https://www.youtube.com/watch?v=kITJvI0o_1A',
-    video_title: "Video Explanation: Electric Field Due to Line Charge",
-    video_description: 'Watch the step-by-step 3D visualization showing why flux through the circular end caps equals zero.',
     status: 'published',
     display_order: 1,
     created_at: new Date('2026-01-02').toISOString(),
@@ -265,9 +259,6 @@ $$I = \\frac{Q}{t} = \\frac{n A L e}{\\left(\\frac{L}{v_d}\\right)}$$
 $$\\mathbf{I = n e A v_d}$$
 
 This proves the direct proportional relationship: $I \\propto v_d$.`,
-    audio_url: 'https://actions.google.com/sounds/v1/ambiences/office_white_noise.ogg',
-    audio_title: 'Quick Audio Revision: Drift Velocity and Current Density',
-    audio_description: 'Key derivation check: remember to define n as number density, not total electrons.',
     status: 'published',
     display_order: 1,
     created_at: new Date('2026-01-03').toISOString(),
@@ -344,9 +335,6 @@ $$E_{\\text{cell}} = 3.17 - 0.210 = \\mathbf{+2.96\\text{ V}}$$
 
 **Final Answer:**
 The cell potential at 298 K is **+2.96 V**.`,
-    video_url: 'https://www.youtube.com/watch?v=x4M84_4-pvg',
-    video_title: 'Step-by-step Nernst Equation Calculations',
-    video_description: 'Common pitfalls in stoichiometry squaring (e.g. [Ag+]^2) explained with examples.',
     status: 'published',
     display_order: 1,
     created_at: new Date('2026-01-04').toISOString(),

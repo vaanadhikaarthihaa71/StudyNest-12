@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Plus,
   Edit2,
@@ -21,6 +21,9 @@ import {
   RotateCcw,
   Check,
   AlertTriangle,
+  ZoomIn,
+  Maximize2,
+  FileImage,
 } from 'lucide-react';
 import { useStudy } from '../../context/StudyContext';
 import { Question, QuestionType, QuestionStatus } from '../../types';
@@ -30,8 +33,10 @@ import { VideoPlayer } from '../media/VideoPlayer';
 import {
   validateAudioFile,
   validateVideoFile,
+  validateImageFile,
   uploadMediaFile,
   deleteMediaFile,
+  resolveMediaUrl,
   formatFileSize,
 } from '../../lib/mediaStorage';
 
@@ -74,6 +79,8 @@ export const ManageQuestions: React.FC = () => {
   // File Inputs Refs
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const answerImageInputRef = useRef<HTMLInputElement | null>(null);
+  const questionImageInputRef = useRef<HTMLInputElement | null>(null);
 
   // Upload Progress States
   const [audioUploadState, setAudioUploadState] = useState<FileUploadState>({
@@ -81,6 +88,14 @@ export const ManageQuestions: React.FC = () => {
     progress: 0,
   });
   const [videoUploadState, setVideoUploadState] = useState<FileUploadState>({
+    status: 'idle',
+    progress: 0,
+  });
+  const [answerImageUploadState, setAnswerImageUploadState] = useState<FileUploadState>({
+    status: 'idle',
+    progress: 0,
+  });
+  const [questionImageUploadState, setQuestionImageUploadState] = useState<FileUploadState>({
     status: 'idle',
     progress: 0,
   });
@@ -107,9 +122,41 @@ export const ManageQuestions: React.FC = () => {
   const [videoFileSize, setVideoFileSize] = useState<number | undefined>(undefined);
   const [videoStoragePath, setVideoStoragePath] = useState('');
 
-  // Diagram / Image
+  // Model Answer Image State (Solution Diagram / Image)
+  const [answerImageUrl, setAnswerImageUrl] = useState('');
+  const [answerImageCaption, setAnswerImageCaption] = useState('');
+  const [answerImageFileName, setAnswerImageFileName] = useState('');
+  const [answerImageFileSize, setAnswerImageFileSize] = useState<number | undefined>(undefined);
+  const [answerImageStoragePath, setAnswerImageStoragePath] = useState('');
+  const [resolvedAnswerImageUrl, setResolvedAnswerImageUrl] = useState('');
+
+  // Question Diagram / Image
   const [imageUrl, setImageUrl] = useState('');
   const [imageCaption, setImageCaption] = useState('');
+  const [imageFileName, setImageFileName] = useState('');
+  const [imageFileSize, setImageFileSize] = useState<number | undefined>(undefined);
+  const [imageStoragePath, setImageStoragePath] = useState('');
+  const [resolvedImageUrl, setResolvedImageUrl] = useState('');
+
+  // Lightbox Zoom state
+  const [zoomedImage, setZoomedImage] = useState<{ url: string; caption?: string } | null>(null);
+
+  // Resolve image URLs whenever they change
+  useEffect(() => {
+    if (answerImageUrl) {
+      resolveMediaUrl(answerImageUrl).then((src) => setResolvedAnswerImageUrl(src));
+    } else {
+      setResolvedAnswerImageUrl('');
+    }
+  }, [answerImageUrl]);
+
+  useEffect(() => {
+    if (imageUrl) {
+      resolveMediaUrl(imageUrl).then((src) => setResolvedImageUrl(src));
+    } else {
+      setResolvedImageUrl('');
+    }
+  }, [imageUrl]);
 
   const [status, setStatus] = useState<QuestionStatus>('published');
   const [displayOrder, setDisplayOrder] = useState(1);
@@ -125,8 +172,12 @@ export const ManageQuestions: React.FC = () => {
   const resetUploadStates = () => {
     setAudioUploadState({ status: 'idle', progress: 0 });
     setVideoUploadState({ status: 'idle', progress: 0 });
+    setAnswerImageUploadState({ status: 'idle', progress: 0 });
+    setQuestionImageUploadState({ status: 'idle', progress: 0 });
     if (audioInputRef.current) audioInputRef.current.value = '';
     if (videoInputRef.current) videoInputRef.current.value = '';
+    if (answerImageInputRef.current) answerImageInputRef.current.value = '';
+    if (questionImageInputRef.current) questionImageInputRef.current.value = '';
   };
 
   const openNewForm = () => {
@@ -153,9 +204,19 @@ export const ManageQuestions: React.FC = () => {
     setVideoFileSize(undefined);
     setVideoStoragePath('');
 
-    // Diagram
+    // Model Answer Image
+    setAnswerImageUrl('');
+    setAnswerImageCaption('');
+    setAnswerImageFileName('');
+    setAnswerImageFileSize(undefined);
+    setAnswerImageStoragePath('');
+
+    // Question Diagram
     setImageUrl('');
     setImageCaption('');
+    setImageFileName('');
+    setImageFileSize(undefined);
+    setImageStoragePath('');
 
     setStatus('published');
     const existing = questions.filter((q) => q.chapter_id === selectedChapterId);
@@ -193,8 +254,20 @@ export const ManageQuestions: React.FC = () => {
     setVideoFileSize(q.video_file_size);
     setVideoStoragePath(q.video_storage_path || '');
 
+    // Model Answer Image
+    setAnswerImageUrl(q.answer_image_url || '');
+    setAnswerImageCaption(q.answer_image_caption || '');
+    setAnswerImageFileName(q.answer_image_file_name || (q.answer_image_url ? 'Attached Solution Image' : ''));
+    setAnswerImageFileSize(q.answer_image_file_size);
+    setAnswerImageStoragePath(q.answer_image_storage_path || '');
+
+    // Question Diagram
     setImageUrl(q.image_url || '');
     setImageCaption(q.image_caption || '');
+    setImageFileName(q.image_file_name || (q.image_url ? 'Attached Diagram' : ''));
+    setImageFileSize(q.image_file_size);
+    setImageStoragePath(q.image_storage_path || '');
+
     setStatus(q.status);
     setDisplayOrder(q.display_order);
     setFormError('');
@@ -378,6 +451,166 @@ export const ManageQuestions: React.FC = () => {
   };
 
   // -------------------------------------------------------------
+  // Direct Model Answer Image File Upload Handler
+  // -------------------------------------------------------------
+  const handleAnswerImageFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setAnswerImageUploadState({
+        status: 'error',
+        progress: 0,
+        fileName: file.name,
+        fileSize: file.size,
+        errorMessage: validation.error,
+        lastFile: file,
+      });
+      return;
+    }
+
+    setAnswerImageUploadState({
+      status: 'uploading',
+      progress: 10,
+      fileName: file.name,
+      fileSize: file.size,
+      lastFile: file,
+    });
+
+    try {
+      const result = await uploadMediaFile(
+        file,
+        'image',
+        editingId ? `ans_${editingId}` : 'new_ans',
+        (progress) => {
+          setAnswerImageUploadState((prev) => ({ ...prev, progress }));
+        }
+      );
+
+      setAnswerImageUrl(result.url);
+      setAnswerImageFileName(result.file_name);
+      setAnswerImageFileSize(result.file_size);
+      setAnswerImageStoragePath(result.storage_path);
+      if (!answerImageCaption) {
+        setAnswerImageCaption(`Solution Diagram: ${file.name.replace(/\.[^/.]+$/, '')}`);
+      }
+
+      setAnswerImageUploadState({
+        status: 'completed',
+        progress: 100,
+        fileName: result.file_name,
+        fileSize: result.file_size,
+      });
+
+      showToast('Solution image attached to model answer!', 'success');
+    } catch (err: any) {
+      setAnswerImageUploadState({
+        status: 'error',
+        progress: 0,
+        fileName: file.name,
+        fileSize: file.size,
+        errorMessage: err.message || 'Failed to upload answer image.',
+        lastFile: file,
+      });
+    }
+  };
+
+  const handleRemoveAnswerImage = async () => {
+    if (answerImageStoragePath) {
+      await deleteMediaFile('image', answerImageStoragePath);
+    }
+    setAnswerImageUrl('');
+    setAnswerImageFileName('');
+    setAnswerImageFileSize(undefined);
+    setAnswerImageStoragePath('');
+    setAnswerImageCaption('');
+    setAnswerImageUploadState({ status: 'idle', progress: 0 });
+    if (answerImageInputRef.current) answerImageInputRef.current.value = '';
+    showToast('Solution image removed from model answer', 'info');
+  };
+
+  // -------------------------------------------------------------
+  // Direct Question Diagram File Upload Handler
+  // -------------------------------------------------------------
+  const handleQuestionImageFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setQuestionImageUploadState({
+        status: 'error',
+        progress: 0,
+        fileName: file.name,
+        fileSize: file.size,
+        errorMessage: validation.error,
+        lastFile: file,
+      });
+      return;
+    }
+
+    setQuestionImageUploadState({
+      status: 'uploading',
+      progress: 10,
+      fileName: file.name,
+      fileSize: file.size,
+      lastFile: file,
+    });
+
+    try {
+      const result = await uploadMediaFile(
+        file,
+        'image',
+        editingId ? `q_${editingId}` : 'new_q',
+        (progress) => {
+          setQuestionImageUploadState((prev) => ({ ...prev, progress }));
+        }
+      );
+
+      setImageUrl(result.url);
+      setImageFileName(result.file_name);
+      setImageFileSize(result.file_size);
+      setImageStoragePath(result.storage_path);
+      if (!imageCaption) {
+        setImageCaption(`Figure: ${file.name.replace(/\.[^/.]+$/, '')}`);
+      }
+
+      setQuestionImageUploadState({
+        status: 'completed',
+        progress: 100,
+        fileName: result.file_name,
+        fileSize: result.file_size,
+      });
+
+      showToast('Question diagram uploaded successfully!', 'success');
+    } catch (err: any) {
+      setQuestionImageUploadState({
+        status: 'error',
+        progress: 0,
+        fileName: file.name,
+        fileSize: file.size,
+        errorMessage: err.message || 'Failed to upload question diagram.',
+        lastFile: file,
+      });
+    }
+  };
+
+  const handleRemoveQuestionImage = async () => {
+    if (imageStoragePath) {
+      await deleteMediaFile('image', imageStoragePath);
+    }
+    setImageUrl('');
+    setImageFileName('');
+    setImageFileSize(undefined);
+    setImageStoragePath('');
+    setImageCaption('');
+    setQuestionImageUploadState({ status: 'idle', progress: 0 });
+    if (questionImageInputRef.current) questionImageInputRef.current.value = '';
+    showToast('Question diagram removed', 'info');
+  };
+
+  // -------------------------------------------------------------
   // Save Question
   // -------------------------------------------------------------
   const handleSave = (addAnother = false) => {
@@ -396,6 +629,12 @@ export const ManageQuestions: React.FC = () => {
       question_type: questionType,
       marks: marks ? Number(marks) : undefined,
       answer_content: answerContent.trim(),
+      // Model Answer Image / Solution Diagram
+      answer_image_url: answerImageUrl.trim() || undefined,
+      answer_image_caption: answerImageCaption.trim() || undefined,
+      answer_image_file_name: answerImageFileName.trim() || undefined,
+      answer_image_file_size: answerImageFileSize,
+      answer_image_storage_path: answerImageStoragePath.trim() || undefined,
       // Audio
       audio_url: audioUrl.trim() || undefined,
       audio_title: audioTitle.trim() || undefined,
@@ -410,9 +649,12 @@ export const ManageQuestions: React.FC = () => {
       video_file_name: videoFileName.trim() || undefined,
       video_file_size: videoFileSize,
       video_storage_path: videoStoragePath.trim() || undefined,
-      // Image
+      // Question Diagram
       image_url: imageUrl.trim() || undefined,
       image_caption: imageCaption.trim() || undefined,
+      image_file_name: imageFileName.trim() || undefined,
+      image_file_size: imageFileSize,
+      image_storage_path: imageStoragePath.trim() || undefined,
       status,
       display_order: Number(displayOrder),
     };
@@ -427,6 +669,11 @@ export const ManageQuestions: React.FC = () => {
       // Clear fields, increment order, keep chapter and settings
       setQuestionText('');
       setAnswerContent('');
+      setAnswerImageUrl('');
+      setAnswerImageCaption('');
+      setAnswerImageFileName('');
+      setAnswerImageFileSize(undefined);
+      setAnswerImageStoragePath('');
       setAudioUrl('');
       setAudioTitle('');
       setAudioDescription('');
@@ -441,6 +688,9 @@ export const ManageQuestions: React.FC = () => {
       setVideoStoragePath('');
       setImageUrl('');
       setImageCaption('');
+      setImageFileName('');
+      setImageFileSize(undefined);
+      setImageStoragePath('');
       setDisplayOrder((prev) => prev + 1);
       setEditingId(null);
       resetUploadStates();
@@ -461,6 +711,12 @@ export const ManageQuestions: React.FC = () => {
       }
       if (targetQ.video_storage_path) {
         await deleteMediaFile('video', targetQ.video_storage_path);
+      }
+      if (targetQ.answer_image_storage_path) {
+        await deleteMediaFile('image', targetQ.answer_image_storage_path);
+      }
+      if (targetQ.image_storage_path) {
+        await deleteMediaFile('image', targetQ.image_storage_path);
       }
     }
     deleteQuestion(id);
@@ -502,6 +758,22 @@ export const ManageQuestions: React.FC = () => {
         type="file"
         accept="video/mp4,video/webm,video/*,.mp4,.webm,.mov"
         onChange={handleVideoFileSelected}
+        className="hidden"
+        aria-hidden="true"
+      />
+      <input
+        ref={answerImageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml,image/gif,.png,.jpg,.jpeg,.webp,.svg,.gif"
+        onChange={handleAnswerImageFileSelected}
+        className="hidden"
+        aria-hidden="true"
+      />
+      <input
+        ref={questionImageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml,image/gif,.png,.jpg,.jpeg,.webp,.svg,.gif"
+        onChange={handleQuestionImageFileSelected}
         className="hidden"
         aria-hidden="true"
       />
@@ -704,6 +976,202 @@ export const ManageQuestions: React.FC = () => {
               rows={8}
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-hidden focus:border-violet-600"
             />
+          </div>
+
+          {/* ============================================================== */}
+          {/* MODEL ANSWER SOLUTION IMAGE / DIAGRAM UPLOAD */}
+          {/* ============================================================== */}
+          <div className="p-4 rounded-2xl bg-violet-50/60 border border-violet-200/80 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-xs">
+                  <Image className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                    <span>Model Answer Solution Image / Diagram</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                      Supports PNG, JPG, WEBP, SVG
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Attach a step-by-step diagram, handwritten formula solution, or illustration directly to the model answer.
+                  </p>
+                </div>
+              </div>
+
+              {/* Upload Button */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => answerImageInputRef.current?.click()}
+                  disabled={answerImageUploadState.status === 'uploading'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{answerImageUrl ? 'Replace Solution Image' : 'Upload Solution Image'}</span>
+                </button>
+
+                {answerImageUrl && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAnswerImage}
+                    className="p-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="Remove solution image"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Answer Image Upload Progress */}
+            {answerImageUploadState.status === 'uploading' && (
+              <div className="p-3 bg-white rounded-xl border border-violet-200 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-violet-900 flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                    Uploading solution image: {answerImageUploadState.fileName}
+                  </span>
+                  <span className="font-bold text-violet-700">{answerImageUploadState.progress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-violet-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-violet-600 transition-all duration-300 rounded-full"
+                    style={{ width: `${answerImageUploadState.progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Upload Error Banner */}
+            {answerImageUploadState.status === 'error' && (
+              <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-start gap-2 text-xs text-rose-700">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                <div className="space-y-1">
+                  <span className="font-semibold">Upload failed: </span>
+                  <span>{answerImageUploadState.errorMessage}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Answer Image Preview & Caption Card */}
+            {answerImageUrl ? (
+              <div className="p-3.5 bg-white rounded-xl border border-violet-200 flex flex-col md:flex-row gap-4 items-start shadow-2xs">
+                <div className="relative group shrink-0 w-full sm:w-52 h-40 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center">
+                  <img
+                    src={resolvedAnswerImageUrl || answerImageUrl}
+                    alt={answerImageCaption || 'Model Answer Solution Diagram'}
+                    className="max-h-full max-w-full object-contain p-1"
+                  />
+                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 text-white transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => setZoomedImage({ url: resolvedAnswerImageUrl || answerImageUrl, caption: answerImageCaption })}
+                      className="p-1.5 rounded-lg bg-white/20 hover:bg-white/40 text-white transition-colors cursor-pointer"
+                      title="Enlarge image"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => answerImageInputRef.current?.click()}
+                      className="p-1.5 rounded-lg bg-white/20 hover:bg-white/40 text-white transition-colors cursor-pointer"
+                      title="Replace image"
+                    >
+                      <Upload className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 w-full space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-800 truncate">
+                      {answerImageFileName || 'Attached Solution Image'}
+                    </span>
+                    {answerImageFileSize && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                        {formatFileSize(answerImageFileSize)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Solution Figure Caption / Label
+                    </label>
+                    <input
+                      type="text"
+                      value={answerImageCaption}
+                      onChange={(e) => setAnswerImageCaption(e.target.value)}
+                      placeholder="e.g. Figure 1: Ray Diagram / Electric Field Lines / Mechanism"
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-hidden focus:border-violet-600"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snippet = `\n\n![${answerImageCaption || 'Solution Diagram'}](${answerImageUrl})\n*${answerImageCaption || 'Figure: Model Answer Diagram'}*\n`;
+                        insertMarkdownSnippet(snippet);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                      title="Insert markdown code to display this image inside the written answer text"
+                    >
+                      <span>Embed in Text</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setZoomedImage({ url: resolvedAnswerImageUrl || answerImageUrl, caption: answerImageCaption })}
+                      className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Preview Large</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Drop / Click Zone when empty */
+              <div
+                onClick={() => answerImageInputRef.current?.click()}
+                className="p-5 border-2 border-dashed border-violet-200 hover:border-violet-400 bg-white/70 hover:bg-white rounded-xl text-center cursor-pointer transition-all group"
+              >
+                <Image className="w-8 h-8 text-violet-400 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
+                <p className="text-xs font-bold text-violet-900">
+                  Click to choose a solution diagram or answer image from your computer
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Supports PNG, JPG, JPEG, WEBP, SVG (Max 25MB)
+                </p>
+              </div>
+            )}
+
+            {/* Direct Image URL Option */}
+            <div className="pt-0.5">
+              <details className="text-xs text-slate-500">
+                <summary className="cursor-pointer font-semibold hover:text-slate-700 select-none">
+                  Or enter direct Image URL
+                </summary>
+                <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="url"
+                    value={answerImageUrl}
+                    onChange={(e) => setAnswerImageUrl(e.target.value)}
+                    placeholder="https://... image link"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={answerImageCaption}
+                    onChange={(e) => setAnswerImageCaption(e.target.value)}
+                    placeholder="Caption for solution figure..."
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                </div>
+              </details>
+            </div>
           </div>
 
           {/* ============================================================== */}
@@ -1000,38 +1468,116 @@ export const ManageQuestions: React.FC = () => {
             )}
           </div>
 
-          {/* Diagram / Image Attachment */}
+          {/* Question Diagram / Image Attachment */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Image className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Optional Diagram / Figure Attachment</span>
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Diagram / Image URL
-                </label>
-                <input
-                  type="url"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
-                />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
+                  <Image className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Question Problem Diagram (Optional)
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Diagram or given figure shown alongside the question statement.
+                  </p>
+                </div>
               </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Figure Caption
-                </label>
-                <input
-                  type="text"
-                  value={imageCaption}
-                  onChange={(e) => setImageCaption(e.target.value)}
-                  placeholder="e.g. Gaussian cylindrical surface diagram"
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
-                />
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => questionImageInputRef.current?.click()}
+                  disabled={questionImageUploadState.status === 'uploading'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{imageUrl ? 'Replace Diagram' : 'Upload Diagram'}</span>
+                </button>
+
+                {imageUrl && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveQuestionImage}
+                    className="p-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="Remove question diagram"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Upload Progress */}
+            {questionImageUploadState.status === 'uploading' && (
+              <div className="p-3 bg-white rounded-xl border border-emerald-200 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-emerald-900 flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    Uploading question diagram: {questionImageUploadState.fileName}
+                  </span>
+                  <span className="font-bold text-emerald-700">{questionImageUploadState.progress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-emerald-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-600 transition-all duration-300 rounded-full"
+                    style={{ width: `${questionImageUploadState.progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {imageUrl ? (
+              <div className="p-3 bg-white rounded-xl border border-emerald-200 flex flex-col sm:flex-row gap-3 items-center">
+                <div className="w-28 h-20 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0">
+                  <img
+                    src={resolvedImageUrl || imageUrl}
+                    alt={imageCaption || 'Question Diagram'}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+                <div className="flex-1 w-full space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-600">
+                    Figure Caption / Description
+                  </label>
+                  <input
+                    type="text"
+                    value={imageCaption}
+                    onChange={(e) => setImageCaption(e.target.value)}
+                    placeholder="e.g. Figure 1: Given circuit diagram or charge geometry"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Or Enter Diagram URL
+                  </label>
+                  <input
+                    type="url"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Figure Caption
+                  </label>
+                  <input
+                    type="text"
+                    value={imageCaption}
+                    onChange={(e) => setImageCaption(e.target.value)}
+                    placeholder="e.g. Gaussian cylindrical surface diagram"
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Form Actions */}
@@ -1046,6 +1592,10 @@ export const ManageQuestions: React.FC = () => {
                   question_type: questionType,
                   marks,
                   answer_content: answerContent,
+                  answer_image_url: answerImageUrl,
+                  answer_image_caption: answerImageCaption,
+                  image_url: imageUrl,
+                  image_caption: imageCaption,
                   audio_url: audioUrl,
                   audio_title: audioTitle,
                   audio_file_name: audioFileName,
@@ -1126,11 +1676,47 @@ export const ManageQuestions: React.FC = () => {
                 )}
               </div>
               <h3 className="text-lg font-bold text-slate-900">{previewQuestion.question_text}</h3>
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Model Answer
+
+              {previewQuestion.image_url && (
+                <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                  <img
+                    src={resolvedImageUrl || previewQuestion.image_url}
+                    alt={previewQuestion.image_caption || 'Question Diagram'}
+                    className="w-full max-h-60 object-contain p-2"
+                  />
+                  {previewQuestion.image_caption && (
+                    <p className="text-center text-xs text-slate-500 py-1.5 border-t border-slate-200 bg-white">
+                      Figure: {previewQuestion.image_caption}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Model Answer & Solution
                 </h4>
                 <MarkdownRenderer content={previewQuestion.answer_content} />
+
+                {previewQuestion.answer_image_url && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <span className="text-[11px] font-bold text-violet-700 block mb-1">
+                      Solution Diagram / Figure:
+                    </span>
+                    <div className="rounded-xl overflow-hidden border border-violet-200 bg-white p-2">
+                      <img
+                        src={resolvedAnswerImageUrl || previewQuestion.answer_image_url}
+                        alt={previewQuestion.answer_image_caption || 'Solution Diagram'}
+                        className="w-full max-h-64 object-contain"
+                      />
+                      {previewQuestion.answer_image_caption && (
+                        <p className="text-center text-xs text-slate-500 pt-1">
+                          {previewQuestion.answer_image_caption}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {previewQuestion.audio_url && (
@@ -1255,9 +1841,22 @@ export const ManageQuestions: React.FC = () => {
                     {/* Answer Status */}
                     <td className="p-4">
                       {hasAnswer ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          <Check className="w-3 h-3 text-emerald-600" />
-                          <span>Added</span>
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>Added</span>
+                          </span>
+                          {q.answer_image_url && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200">
+                              <Image className="w-2.5 h-2.5 text-violet-600" />
+                              <span>+ Image</span>
+                            </span>
+                          )}
+                        </div>
+                      ) : q.answer_image_url ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200">
+                          <Image className="w-3 h-3 text-violet-600" />
+                          <span>Image Solution</span>
                         </span>
                       ) : (
                         <span className="text-[11px] text-slate-400">Missing</span>
@@ -1370,6 +1969,42 @@ export const ManageQuestions: React.FC = () => {
                 Yes, Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Lightbox Modal */}
+      {zoomedImage && (
+        <div
+          onClick={() => setZoomedImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs cursor-pointer animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl p-4 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl space-y-3 cursor-default"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-xs font-bold text-slate-800">
+                {zoomedImage.caption || 'Diagram Preview'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomedImage(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto flex items-center justify-center bg-slate-50 rounded-2xl p-2 min-h-[250px]">
+              <img
+                src={zoomedImage.url}
+                alt={zoomedImage.caption || 'Enlarged Preview'}
+                className="max-h-[70vh] max-w-full object-contain rounded-lg"
+              />
+            </div>
+            {zoomedImage.caption && (
+              <p className="text-center text-xs text-slate-500 font-medium">{zoomedImage.caption}</p>
+            )}
           </div>
         </div>
       )}

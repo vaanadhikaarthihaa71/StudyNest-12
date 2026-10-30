@@ -14,6 +14,7 @@ import {
   BarChart,
   Clock,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { useStudy } from '../../context/StudyContext';
 import { ManageSubjects } from './ManageSubjects';
@@ -21,15 +22,16 @@ import { ManageChapters } from './ManageChapters';
 import { ManageQuestions } from './ManageQuestions';
 import { BulkImportExport } from './BulkImportExport';
 import { DatabaseSettings } from './DatabaseSettings';
+import { ManageStudents } from './ManageStudents';
 
 interface AdminDashboardProps {
   onNavigate: (view: string, params?: Record<string, string>) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
-  const { subjects, chapters, questions, logoutAdmin } = useStudy();
+  const { subjects, chapters, questions, logoutAdmin, allStudentsWithStats } = useStudy();
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'subjects' | 'chapters' | 'questions' | 'import-export' | 'database'
+    'overview' | 'students' | 'subjects' | 'chapters' | 'questions' | 'import-export' | 'database'
   >('overview');
 
   const totalSubjects = subjects.length;
@@ -46,6 +48,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart },
+    { id: 'students', label: `Student Management (${allStudentsWithStats.length})`, icon: Users },
     { id: 'subjects', label: `Subjects (${totalSubjects})`, icon: BookOpen },
     { id: 'chapters', label: `Chapters (${totalChapters})`, icon: Layers },
     { id: 'questions', label: `Questions (${totalQuestions})`, icon: HelpCircle },
@@ -249,6 +252,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           </div>
         </div>
       )}
+      
+      {/* Tab: Student Management & Learning Analytics */}
+      {activeTab === 'students' && <ManageStudents />}
 
       {/* Tab 2: Manage Subjects */}
       {activeTab === 'subjects' && <ManageSubjects />}

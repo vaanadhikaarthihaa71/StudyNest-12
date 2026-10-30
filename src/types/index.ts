@@ -43,6 +43,14 @@ export interface Question {
   video_storage_path?: string;
   image_url?: string;
   image_caption?: string;
+  image_storage_path?: string;
+  image_file_name?: string;
+  image_file_size?: number;
+  answer_image_url?: string;
+  answer_image_caption?: string;
+  answer_image_storage_path?: string;
+  answer_image_file_name?: string;
+  answer_image_file_size?: number;
   status: QuestionStatus;
   display_order: number;
   created_at: string;
@@ -95,4 +103,51 @@ export interface SupabaseConfig {
   supabaseAnonKey: string;
   isConnected: boolean;
   isConfigured: boolean;
+}
+
+export type StudentActivityType =
+  | 'login'
+  | 'view_question'
+  | 'complete_question'
+  | 'uncomplete_question'
+  | 'bookmark'
+  | 'unbookmark';
+
+export interface StudentProfile {
+  id: string; // Supabase auth UUID
+  full_name: string;
+  email: string;
+  avatar_url?: string;
+  target_board?: string; // e.g. 'CBSE Class 12'
+  total_questions_completed: number;
+  last_login_at?: string;
+  last_studied_at?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface StudentActivity {
+  id: string;
+  user_id: string;
+  activity_type: StudentActivityType;
+  question_id?: string;
+  chapter_id?: string;
+  subject_id?: string;
+  details?: Record<string, any>;
+  created_at: string;
+}
+
+export interface StudentWithStats extends StudentProfile {
+  completed_count: number;
+  progress_percentage: number;
+  bookmarked_count: number;
+  subject_breakdown?: Record<string, { total: number; completed: number }>;
+}
+
+export interface StudentFilterOptions {
+  searchQuery: string;
+  subjectId: string;
+  chapterId: string;
+  progressFilter: 'all' | 'high' | 'medium' | 'low' | 'not_started';
+  activityPeriod: 'all' | 'today' | '7days' | '30days';
 }

@@ -147,6 +147,47 @@ export function resetAllDataToDefault() {
   saveLocalRecentActivity([]);
 }
 
+// Student Profile Local Persistence
+const STORAGE_KEY_STUDENT = 'studynest_current_student_v1';
+const STORAGE_KEY_ACTIVITIES = 'studynest_student_activities_v1';
+
+export function getLocalStudentProfile(): any | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(STORAGE_KEY_STUDENT);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function saveLocalStudentProfile(profile: any | null) {
+  if (typeof window !== 'undefined') {
+    if (profile) localStorage.setItem(STORAGE_KEY_STUDENT, JSON.stringify(profile));
+    else localStorage.removeItem(STORAGE_KEY_STUDENT);
+  }
+}
+
+export function getLocalStudentActivities(): any[] {
+  if (typeof window === 'undefined') return [];
+  const raw = localStorage.getItem(STORAGE_KEY_ACTIVITIES);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalStudentActivity(activity: any) {
+  if (typeof window !== 'undefined') {
+    const list = getLocalStudentActivities();
+    const updated = [activity, ...list].slice(0, 100);
+    localStorage.setItem(STORAGE_KEY_ACTIVITIES, JSON.stringify(updated));
+  }
+}
+
 // Admin Authentication State
 export function isAdminAuthenticated(): boolean {
   if (typeof window === 'undefined') return false;
@@ -211,5 +252,44 @@ export async function syncLocalToSupabase(): Promise<{ success: boolean; count: 
     return { success: true, count: subjects.length + chapters.length + questions.length };
   } catch (err: any) {
     return { success: false, count: 0, error: err.message || 'Failed syncing to Supabase' };
+  }
+}
+
+// Student Cloud Operations
+export async function logStudentActivityCloud(
+  userId: string,
+  activityType: string,
+  questionId?: string,
+  chapterId?: string,
+  subjectId?: string,
+  details?: Record<string, any>
+) {
+  const client = getSupabaseClient();
+  const activity = {
+    id: 'act-' + Math.random().toString(36).substring(2, 10),
+    user_id: userId,
+    activity_type: activityType,
+    question_id: questionId || null,
+    chapter_id: chapterId || null,
+    subject_id: subjectId || null,
+    details: details || {},
+    created_at: new Date().toISOString(),
+  };
+
+  saveLocalStudentActivity(activity);
+
+  if (client) {
+    try {
+      await client.from('student_activity').insert({
+        user_id: userId,
+        activity_type: activityType,
+        question_id: questionId || null,
+        chapter_id: chapterId || null,
+        subject_id: subjectId || null,
+        details: details || {},
+      });
+    } catch {
+      // safe fallback
+    }
   }
 }

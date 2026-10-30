@@ -14,12 +14,16 @@ import {
   Copy,
   ExternalLink,
   Sparkles,
+  Image,
+  ZoomIn,
+  X,
 } from 'lucide-react';
 import { useStudy } from '../../context/StudyContext';
 import { Breadcrumbs } from '../common/Breadcrumbs';
 import { MarkdownRenderer } from '../common/MarkdownRenderer';
 import { AudioPlayer } from '../media/AudioPlayer';
 import { VideoPlayer } from '../media/VideoPlayer';
+import { resolveMediaUrl } from '../../lib/mediaStorage';
 
 interface QuestionStudyPageProps {
   subjectId: string;
@@ -48,10 +52,30 @@ export const QuestionStudyPage: React.FC<QuestionStudyPageProps> = ({
   } = useStudy();
 
   const [activeMediaTab, setActiveMediaTab] = useState<'both' | 'audio' | 'video'>('both');
+  const [resolvedQuestionImageUrl, setResolvedQuestionImageUrl] = useState('');
+  const [resolvedAnswerImageUrl, setResolvedAnswerImageUrl] = useState('');
+  const [activeLightboxImage, setActiveLightboxImage] = useState<{ url: string; caption?: string } | null>(null);
 
   const subject = subjects.find((s) => s.id === subjectId);
   const chapter = chapters.find((c) => c.id === chapterId);
   const question = questions.find((q) => q.id === questionId);
+
+  // Resolve media URLs whenever question changes
+  useEffect(() => {
+    if (question?.image_url) {
+      resolveMediaUrl(question.image_url).then((src) => setResolvedQuestionImageUrl(src));
+    } else {
+      setResolvedQuestionImageUrl('');
+    }
+  }, [question?.image_url]);
+
+  useEffect(() => {
+    if (question?.answer_image_url) {
+      resolveMediaUrl(question.answer_image_url).then((src) => setResolvedAnswerImageUrl(src));
+    } else {
+      setResolvedAnswerImageUrl('');
+    }
+  }, [question?.answer_image_url]);
 
   // Chapter's published questions for previous / next navigation
   const chapterQuestions = chapter ? getChapterQuestions(chapter.id, true) : [];
@@ -230,14 +254,27 @@ export const QuestionStudyPage: React.FC<QuestionStudyPageProps> = ({
 
               {/* Attached diagram or illustration if present */}
               {question.image_url && (
-                <div className="my-5 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
-                  <img
-                    src={question.image_url}
-                    alt={question.image_caption || 'Question diagram'}
-                    className="w-full max-h-96 object-contain p-2"
-                  />
+                <div className="my-5 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 relative group">
+                  <div
+                    className="relative cursor-pointer"
+                    onClick={() =>
+                      setActiveLightboxImage({
+                        url: resolvedQuestionImageUrl || question.image_url!,
+                        caption: question.image_caption,
+                      })
+                    }
+                  >
+                    <img
+                      src={resolvedQuestionImageUrl || question.image_url}
+                      alt={question.image_caption || 'Question diagram'}
+                      className="w-full max-h-96 object-contain p-3"
+                    />
+                    <div className="absolute top-3 right-3 bg-white/90 hover:bg-white text-slate-700 p-1.5 rounded-lg shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                      <ZoomIn className="w-4 h-4" />
+                    </div>
+                  </div>
                   {question.image_caption && (
-                    <p className="text-center text-xs text-slate-500 py-2 border-t border-slate-200 bg-white">
+                    <p className="text-center text-xs text-slate-600 font-medium py-2 border-t border-slate-200 bg-white">
                       Figure: {question.image_caption}
                     </p>
                   )}
@@ -258,12 +295,57 @@ export const QuestionStudyPage: React.FC<QuestionStudyPageProps> = ({
               <span className="text-xs text-slate-400 font-medium">Board Standard Solution</span>
             </div>
 
-            {/* Render answer or empty state */}
+            {/* Attached Model Answer Solution Diagram / Image */}
+            {question.answer_image_url && (
+              <div className="p-4 rounded-2xl bg-violet-50/50 border border-violet-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-violet-800 flex items-center gap-1.5">
+                    <Image className="w-3.5 h-3.5 text-violet-600" />
+                    <span>Solution Diagram / Illustrated Workstep</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveLightboxImage({
+                        url: resolvedAnswerImageUrl || question.answer_image_url!,
+                        caption: question.answer_image_caption,
+                      })
+                    }
+                    className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 hover:text-violet-900 cursor-pointer"
+                  >
+                    <ZoomIn className="w-3 h-3" />
+                    <span>Click to Enlarge</span>
+                  </button>
+                </div>
+                <div
+                  onClick={() =>
+                    setActiveLightboxImage({
+                      url: resolvedAnswerImageUrl || question.answer_image_url!,
+                      caption: question.answer_image_caption,
+                    })
+                  }
+                  className="rounded-xl overflow-hidden border border-violet-200/80 bg-white p-2.5 flex items-center justify-center cursor-pointer group hover:border-violet-400 transition-colors"
+                >
+                  <img
+                    src={resolvedAnswerImageUrl || question.answer_image_url}
+                    alt={question.answer_image_caption || 'Model Answer Solution Diagram'}
+                    className="max-h-[420px] max-w-full object-contain rounded-lg group-hover:scale-[1.01] transition-transform"
+                  />
+                </div>
+                {question.answer_image_caption && (
+                  <p className="text-center text-xs text-slate-600 font-medium pt-1">
+                    {question.answer_image_caption}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Render answer text or empty state */}
             {question.answer_content && question.answer_content.trim() ? (
               <div className="pt-2">
                 <MarkdownRenderer content={question.answer_content} />
               </div>
-            ) : (
+            ) : !question.answer_image_url ? (
               <div className="py-12 text-center text-slate-400 space-y-2">
                 <FileCheck className="w-10 h-10 mx-auto text-slate-300" />
                 <p className="text-sm font-semibold text-slate-600">Answer not added yet</p>
@@ -271,7 +353,7 @@ export const QuestionStudyPage: React.FC<QuestionStudyPageProps> = ({
                   The model solution for this question is currently being prepared. You can add or edit it through the Admin Content Manager.
                 </p>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Mobile Media Accordion / Preview (Visible on smaller screens below answer) */}
@@ -429,6 +511,44 @@ export const QuestionStudyPage: React.FC<QuestionStudyPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Student Image Lightbox Modal */}
+      {activeLightboxImage && (
+        <div
+          onClick={() => setActiveLightboxImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/85 backdrop-blur-xs cursor-pointer animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl p-4 max-w-4xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl space-y-3 cursor-default"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-xs font-bold text-slate-800 truncate pr-4">
+                {activeLightboxImage.caption || 'Diagram View'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveLightboxImage(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto flex items-center justify-center bg-slate-50 rounded-2xl p-2 min-h-[300px]">
+              <img
+                src={activeLightboxImage.url}
+                alt={activeLightboxImage.caption || 'Enlarged Diagram'}
+                className="max-h-[75vh] max-w-full object-contain rounded-lg"
+              />
+            </div>
+            {activeLightboxImage.caption && (
+              <p className="text-center text-xs text-slate-600 font-medium">
+                {activeLightboxImage.caption}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -8,6 +8,7 @@ import { StudyProvider, useStudy } from './context/StudyContext';
 import { Header } from './components/common/Header';
 import { ToastContainer } from './components/common/Toast';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
+import { GatewayScreen } from './components/auth/GatewayScreen';
 import { HomePage } from './components/student/HomePage';
 import { SubjectsListPage } from './components/student/SubjectsListPage';
 import { SubjectPage } from './components/student/SubjectPage';
@@ -17,8 +18,10 @@ import { BookmarksPage } from './components/student/BookmarksPage';
 import { ProgressPage } from './components/student/ProgressPage';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { StudentAuthModal } from './components/student/StudentAuthModal';
+import { StudentProfileModal } from './components/student/StudentProfileModal';
 import { SearchResult } from './types';
-import { GraduationCap, Shield, Heart } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 
 interface NavigationState {
   view: string;
@@ -26,9 +29,21 @@ interface NavigationState {
 }
 
 function MainApp() {
-  const { isAdmin, subjects, chapters, questions } = useStudy();
+  const {
+    isAdmin,
+    currentStudent,
+    isStudentLoading,
+    subjects,
+    chapters,
+    questions,
+    logoutAdmin,
+    logoutStudent,
+  } = useStudy();
+
+  // Ensures that whenever the app opens, the Login Page comes first
+  const [hasLoggedInThisVisit, setHasLoggedInThisVisit] = useState(false);
+
   const [navState, setNavState] = useState<NavigationState>(() => {
-    // Check initial hash or default to home
     const hash = window.location.hash.replace('#', '');
     if (hash.startsWith('/admin')) {
       return { view: 'admin-dashboard', params: {} };
@@ -44,7 +59,11 @@ function MainApp() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setIsSearchOpen(true);
-      } else if (e.key === '/' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+      } else if (
+        e.key === '/' &&
+        (e.target as HTMLElement).tagName !== 'INPUT' &&
+        (e.target as HTMLElement).tagName !== 'TEXTAREA'
+      ) {
         e.preventDefault();
         setIsSearchOpen(true);
       }
@@ -67,7 +86,6 @@ function MainApp() {
         chapterId: result.id,
       });
     } else if (result.type === 'question') {
-      // Find question to get its chapter and subject
       const targetQ = questions.find((q) => q.id === result.id);
       if (targetQ) {
         const targetChap = chapters.find((c) => c.id === targetQ.chapter_id);
@@ -82,6 +100,40 @@ function MainApp() {
     }
   };
 
+  // 1. Session Loading State
+  if (isStudentLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-700">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center animate-pulse shadow-lg shadow-indigo-600/20">
+          <GraduationCap className="w-6 h-6" />
+        </div>
+        <p className="mt-4 font-bold text-slate-900 text-base">StudyNest 12</p>
+        <p className="text-xs text-slate-400 mt-1">Connecting to Class 12 workspace...</p>
+      </div>
+    );
+  }
+
+  // 2. Gateway Guard: When the app opens, the Login Page ALWAYS comes first
+  if (!hasLoggedInThisVisit) {
+    return (
+      <div className="min-h-screen">
+        <GatewayScreen
+          onLoginSuccess={(role) => {
+            setHasLoggedInThisVisit(true);
+            if (role === 'admin') {
+              handleNavigate('admin-dashboard');
+            } else {
+              handleNavigate('home');
+            }
+          }}
+        />
+        <StudentAuthModal />
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  // 3. Render Authenticated Views
   const renderCurrentView = () => {
     switch (navState.view) {
       case 'home':
@@ -140,10 +192,15 @@ function MainApp() {
         currentView={navState.view}
         onNavigate={handleNavigate}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onReturnToLogin={() => {
+          setHasLoggedInThisVisit(false);
+          if (isAdmin) logoutAdmin();
+          if (currentStudent) logoutStudent();
+        }}
       />
 
       {/* Main Page Body */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6 pb-12">
         {renderCurrentView()}
       </main>
 
@@ -153,6 +210,10 @@ function MainApp() {
         onClose={() => setIsSearchOpen(false)}
         onSelectResult={handleSelectSearchResult}
       />
+
+      {/* Student Authentication & Profile Modals */}
+      <StudentAuthModal />
+      <StudentProfileModal />
 
       {/* Floating Interactive Toast Container */}
       <ToastContainer />
@@ -197,15 +258,14 @@ function MainApp() {
             </button>
             <button
               onClick={() => handleNavigate(isAdmin ? 'admin-dashboard' : 'admin-login')}
-              className="hover:text-violet-600 font-bold transition-colors cursor-pointer flex items-center gap-1"
+              className="hover:text-violet-600 font-bold transition-colors cursor-pointer"
             >
-              <Shield className="w-3.5 h-3.5 text-violet-600" />
-              <span>Admin Manager</span>
+              {isAdmin ? 'Admin Console' : 'Admin Login'}
             </button>
           </div>
 
           <p className="text-[11px] text-slate-400 text-center sm:text-right">
-            Demonstration educational content. Editable & expandable dynamically.
+            Syllabus: Physics, Chemistry, Biology, Mathematics & Computer Science
           </p>
         </div>
       </footer>

@@ -85,6 +85,32 @@ export function validateVideoFile(file: File): FileValidationResult {
   return { valid: true, warning };
 }
 
+// Validate Image File (PNG, JPG, JPEG, WEBP, SVG, GIF)
+export function validateImageFile(file: File): FileValidationResult {
+  const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif'];
+  const name = file.name.toLowerCase();
+  const hasValidExt = allowedExtensions.some((ext) => name.endsWith(ext));
+  const hasValidMime = file.type.startsWith('image/') || file.type === '';
+
+  if (!hasValidExt && !hasValidMime) {
+    return {
+      valid: false,
+      error: `Unsupported image format "${file.name}". Please upload a PNG, JPG, JPEG, WEBP, SVG, or GIF file.`,
+    };
+  }
+
+  // 25MB image limit
+  const maxBytes = 25 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    return {
+      valid: false,
+      error: `Image file is too large (${formatFileSize(file.size)}). Maximum supported image size is 25 MB.`,
+    };
+  }
+
+  return { valid: true };
+}
+
 // Initialize persistent IndexedDB for binary storage
 function openMediaDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -202,13 +228,13 @@ export async function resolveMediaUrl(rawUrl?: string): Promise<string> {
 }
 
 /**
- * Uploads an audio or video file directly from the computer's file picker.
+ * Uploads an audio, video, or diagram image file directly from the computer's file picker.
  * - If Supabase credentials are configured, uploads to Supabase Storage bucket.
  * - Otherwise, stores permanently in IndexedDB binary store so files persist across page refreshes.
  */
 export async function uploadMediaFile(
   file: File,
-  type: 'audio' | 'video',
+  type: 'audio' | 'video' | 'image',
   questionId: string,
   onProgress?: (progress: number) => void
 ): Promise<UploadResult> {
@@ -219,7 +245,7 @@ export async function uploadMediaFile(
   const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const timestamp = Date.now();
   const storagePath = `${type}/${questionId || 'new'}_${timestamp}_${safeName}`;
-  const bucketName = type === 'audio' ? 'studynest-audio' : 'studynest-video';
+  const bucketName = type === 'audio' ? 'studynest-audio' : type === 'video' ? 'studynest-video' : 'studynest-images';
 
   // Progress simulation for responsive UX feedback
   if (onProgress) onProgress(15);
@@ -229,12 +255,13 @@ export async function uploadMediaFile(
     try {
       if (onProgress) onProgress(45);
 
+      const defaultMime = type === 'audio' ? 'audio/mpeg' : type === 'video' ? 'video/mp4' : 'image/png';
       const { data, error } = await supabase.storage
         .from(bucketName)
         .upload(storagePath, file, {
           cacheControl: '3600',
           upsert: true,
-          contentType: file.type || (type === 'audio' ? 'audio/mpeg' : 'video/mp4'),
+          contentType: file.type || defaultMime,
         });
 
       if (error) {
@@ -252,7 +279,7 @@ export async function uploadMediaFile(
       await saveBlobToIndexedDB(storagePath, file, {
         file_name: file.name,
         file_size: file.size,
-        mime_type: file.type,
+        mime_type: file.type || defaultMime,
       });
 
       if (onProgress) onProgress(100);
@@ -262,7 +289,7 @@ export async function uploadMediaFile(
         storage_path: storagePath,
         file_name: file.name,
         file_size: file.size,
-        mime_type: file.type,
+        mime_type: file.type || defaultMime,
         is_cloud: true,
       };
     } catch (err: any) {
@@ -274,10 +301,11 @@ export async function uploadMediaFile(
   // Local Persistent Binary Storage (survives reloads, restarts, tabs)
   if (onProgress) onProgress(60);
 
+  const defaultMime = type === 'audio' ? 'audio/mpeg' : type === 'video' ? 'video/mp4' : 'image/png';
   await saveBlobToIndexedDB(storagePath, file, {
     file_name: file.name,
     file_size: file.size,
-    mime_type: file.type,
+    mime_type: file.type || defaultMime,
   });
 
   const persistentKey = `indexeddb://${storagePath}`;
@@ -293,7 +321,7 @@ export async function uploadMediaFile(
     storage_path: storagePath,
     file_name: file.name,
     file_size: file.size,
-    mime_type: file.type,
+    mime_type: file.type || defaultMime,
     is_cloud: false,
   };
 }
@@ -302,13 +330,13 @@ export async function uploadMediaFile(
  * Deletes media file from Supabase Storage and/or IndexedDB
  */
 export async function deleteMediaFile(
-  type: 'audio' | 'video',
+  type: 'audio' | 'video' | 'image',
   storagePath?: string
 ): Promise<void> {
   if (!storagePath) return;
 
   const cleanPath = storagePath.replace('indexeddb://', '');
-  const bucketName = type === 'audio' ? 'studynest-audio' : 'studynest-video';
+  const bucketName = type === 'audio' ? 'studynest-audio' : type === 'video' ? 'studynest-video' : 'studynest-images';
   const supabase = getSupabaseClient();
 
   // Delete from cloud if present
